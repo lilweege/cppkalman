@@ -42,15 +42,12 @@ public:
 
     AdditiveUnscentedKalmanFilter(TransitionFunction&&, ObservationFunction&&);
 
-    void Predict(const Moments<StateSize, T>&);
-    Moments<StateSize, T> Update(const std::optional<Observation>&);
+    [[nodiscard]] std::pair<Moments<StateSize, T>, SigmaPoints<StateSize, StateSize, T>> Predict(const Moments<StateSize, T>&);
+    [[nodiscard]] Moments<StateSize, T> Update(const Moments<StateSize, T>&, const SigmaPoints<StateSize, StateSize, T>&, const std::optional<Observation>&);
 
 public:
     const TransitionFunction mTransitionFunction;
     const ObservationFunction mObservationFunction;
-
-    Moments<StateSize, T> mMomentsPredicted;
-    SigmaPoints<StateSize, StateSize, T> mPointsPredicted;
 };
 
 
@@ -137,7 +134,7 @@ UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, auto
     points.weightsMean = sigmaPoints.weightsMean;
     for (size_t i = 0; i < 2*StateSize+1; ++i) {
         Eigen::Vector<T, ObservationSize> row = f(sigmaPoints.points.row(i));
-        for (size_t j = 0; j < row.size(); ++j)
+        for (size_t j = 0; j < (size_t) row.size(); ++j)
             points.points(i, j) = row(j);
     }
 
@@ -146,7 +143,10 @@ UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, auto
 
 
 template<size_t StateSize, size_t ObservationSize, typename T>
-AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::AdditiveUnscentedKalmanFilter(TransitionFunction&& transitionFunction, ObservationFunction&& observationFunction)
+AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::AdditiveUnscentedKalmanFilter(
+    TransitionFunction&& transitionFunction,
+    ObservationFunction&& observationFunction
+)
     : mTransitionFunction{transitionFunction}
     , mObservationFunction{observationFunction}
 {
@@ -154,42 +154,44 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::AdditiveUnscentedK
 
 
 template<size_t StateSize, size_t ObservationSize, typename T>
-void
-AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Predict(const Moments<StateSize, T>& momentsState)
+std::pair<Moments<StateSize, T>, SigmaPoints<StateSize, StateSize, T>>
+AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Predict(
+    const Moments<StateSize, T>& momentsState)
 {
     SigmaPoints pointsState = Moments2Points(momentsState);
     auto [_, moments] = UnscentedTransform<StateSize, StateSize, T>(pointsState, mTransitionFunction);
-
-    mMomentsPredicted = std::move(moments);
-    mPointsPredicted = Moments2Points(mMomentsPredicted);
+    return std::make_pair(moments, Moments2Points(moments));
 }
 
 template<size_t StateSize, size_t ObservationSize, typename T>
 Moments<StateSize, T>
-AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(const std::optional<Observation>& observation)
+AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
+    const Moments<StateSize, T>& momentsPredicted,
+    const SigmaPoints<StateSize, StateSize, T>& pointsPredicted,
+    const std::optional<Observation>& observation)
 {
     if (!observation)
-        return mMomentsPredicted;
+        return momentsPredicted;
 
     Moments<StateSize, T> momentsFiltered;
-    auto [obsPointsPredicted, obsMomentsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(mPointsPredicted, mObservationFunction);
+    auto [obsPointsPredicted, obsMomentsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(pointsPredicted, mObservationFunction);
 
-    auto x = mPointsPredicted.points;
+    auto x = pointsPredicted.points;
     for (size_t i = 0; i < 2*StateSize+1; ++i)
         for (size_t j = 0; j < StateSize; ++j)
-            x(i, j) -= mMomentsPredicted.stateMean(j);
+            x(i, j) -= momentsPredicted.stateMean(j);
     auto y = obsPointsPredicted.points;
     for (size_t i = 0; i < 2*StateSize+1; ++i)
-        for (size_t j = 0; j < StateSize; ++j)
+        for (size_t j = 0; j < ObservationSize; ++j)
             y(i, j) -= obsMomentsPredicted.stateMean(j);
     
-    auto crossSigma = x.transpose() * mPointsPredicted.weightsMean.asDiagonal() * y;
+    auto crossSigma = x.transpose() * pointsPredicted.weightsMean.asDiagonal() * y;
 
     // Kalman gain
     auto K = crossSigma * obsMomentsPredicted.stateCovariance.completeOrthogonalDecomposition().pseudoInverse();
     // Correct
-    momentsFiltered.stateMean = mMomentsPredicted.stateMean + K * (*observation - obsMomentsPredicted.stateMean);
-    momentsFiltered.stateCovariance = mMomentsPredicted.stateCovariance - K * crossSigma.transpose();
+    momentsFiltered.stateMean = momentsPredicted.stateMean + K * (*observation - obsMomentsPredicted.stateMean);
+    momentsFiltered.stateCovariance = momentsPredicted.stateCovariance - K * crossSigma.transpose();
     
     return momentsFiltered;
 }
