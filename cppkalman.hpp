@@ -46,8 +46,8 @@ public:
     [[nodiscard]] Moments<StateSize, T> Update(const Moments<StateSize, T>&, const SigmaPoints<StateSize, StateSize, T>&, const std::optional<Observation>&);
 
 public:
-    const TransitionFunction mTransitionFunction;
-    const ObservationFunction mObservationFunction;
+    TransitionFunction mTransitionFunction;
+    ObservationFunction mObservationFunction;
 };
 
 
@@ -134,7 +134,7 @@ UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, auto
     points.weightsMean = sigmaPoints.weightsMean;
     for (size_t i = 0; i < 2*StateSize+1; ++i) {
         Eigen::Vector<T, ObservationSize> row = f(sigmaPoints.points.row(i));
-        for (size_t j = 0; j < (size_t) row.size(); ++j)
+        for (size_t j = 0; j < ObservationSize; ++j)
             points.points(i, j) = row(j);
     }
 
