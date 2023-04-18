@@ -25,7 +25,7 @@ static const Eigen::Matrix<T, STATE_SIZE, STATE_SIZE> F = (Eigen::Matrix<T, STAT
 static const Eigen::Matrix<T, OBSERVATION_SIZE, STATE_SIZE> H = (Eigen::Matrix<T, OBSERVATION_SIZE, STATE_SIZE>() <<
     1.0, 0.0, 0.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0, 0.0, 0,0
+    0.0, 0.0, 1.0, 0.0, 0.0, 0.0
 ).finished();
 
 
