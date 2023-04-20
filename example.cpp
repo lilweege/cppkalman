@@ -1,14 +1,10 @@
-#define CPPKALMAN_IMPL
-#include "cppkalman.hpp"
+#include "example_templates.hpp"
 using namespace cppkalman;
+using KalmanFilter = AdditiveUnscentedKalmanFilter<STATE_SIZE, OBSERVATION_SIZE, FloatType>;
 
 #include <iostream>
 #include <fstream>
 
-constexpr size_t STATE_SIZE = 6;
-constexpr size_t OBSERVATION_SIZE = 3;
-using T = double;
-using KalmanFilter = AdditiveUnscentedKalmanFilter<STATE_SIZE, OBSERVATION_SIZE, T>;
 
 
 constexpr T dt = 1.0;
