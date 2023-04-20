@@ -82,12 +82,11 @@ Moments2Points(const Moments<StateSize, T>& moments)
     const T c = StateSize + lambda;
 
     for (int i = 0; i < StateSize; ++i) {
-        for (int j = 0; j < 2*StateSize+1; ++j)
-            points.points(j, i) = mu(i);
+        points.points(0, i) = mu(i);
         for (int j = 1; j < StateSize + 1; ++j)
-            points.points(j, i) += sigma2(i, j-1) * (T) sqrt(c);
+            points.points(j, i) = mu(i) + sigma2(i, j-1) * (T) sqrt(c);
         for (int j = StateSize + 1; j < 2*StateSize+1; ++j)
-            points.points(j, i) -= sigma2(i, j-(StateSize+1)) * (T) sqrt(c);
+            points.points(j, i) = mu(i) - sigma2(i, j-(StateSize+1)) * (T) sqrt(c);
     }
 
     points.weightsMean.setOnes();
@@ -123,9 +122,8 @@ Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
     return moments;
 }
 
-
 template<int StateSize, int ObservationSize, typename T, typename Function>
-std::pair<SigmaPoints<StateSize, ObservationSize, T>, Moments<ObservationSize, T>>
+std::pair<Moments<ObservationSize, T>, SigmaPoints<StateSize, ObservationSize, T>>
 static
 UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Function f) // FIXME: constrain function with concept
 {
@@ -137,8 +135,7 @@ UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Func
         for (int j = 0; j < ObservationSize; ++j)
             points.points(i, j) = row(j);
     }
-
-    return std::make_pair(points, Points2Moments(points));
+    return std::make_pair(Points2Moments(points), points);
 }
 
 
@@ -159,7 +156,7 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Predict(
     const Moments<StateSize, T>& momentsState)
 {
     SigmaPoints pointsState = Moments2Points(momentsState);
-    auto [_, moments] = UnscentedTransform<StateSize, StateSize, T>(pointsState, mTransitionFunction);
+    auto [moments, _] = UnscentedTransform<StateSize, StateSize, T>(pointsState, mTransitionFunction);
     return std::make_pair(moments, Moments2Points(moments));
 }
 
@@ -173,8 +170,7 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
     if (!observation)
         return momentsPredicted;
 
-    Moments<StateSize, T> momentsFiltered;
-    auto [obsPointsPredicted, obsMomentsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(pointsPredicted, mObservationFunction);
+    auto [obsMomentsPredicted, obsPointsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(pointsPredicted, mObservationFunction);
 
     auto predDiff = pointsPredicted.points;
     for (int i = 0; i < 2*StateSize+1; ++i)
@@ -189,7 +185,9 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
 
     // Kalman gain
     auto K = crossSigma * obsMomentsPredicted.stateCovariance.completeOrthogonalDecomposition().pseudoInverse();
+
     // Correct
+    Moments<StateSize, T> momentsFiltered;
     momentsFiltered.stateMean = momentsPredicted.stateMean + K * (*observation - obsMomentsPredicted.stateMean);
     momentsFiltered.stateCovariance = momentsPredicted.stateCovariance - K * crossSigma.transpose();
     
