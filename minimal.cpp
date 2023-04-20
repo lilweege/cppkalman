@@ -24,14 +24,15 @@ int main()
     KF kf{transitionFunc, observationFunc};
 
     // Predict
-    cppkalman::Moments<2> currentState;
-    currentState.stateMean << 2.2, 1.1; // Predicted position, velocity
-    currentState.stateCovariance << 1.0, 0.0, 0.0, 1.0;
+    cppkalman::Moments<2> currentState{
+        KF::State{ 2.2, 1.1 }, // Predicted position, velocity
+        Eigen::Matrix2d{{ 1.0, 0.0 },
+                        { 0.0, 1.0 }}, // State covariance
+    };
     auto [predictedState, sigmaPoints] = kf.Predict(currentState);
 
     // Update
-    decltype(kf)::Observation currentObservation;
-    currentObservation << 3.5; // Observed position
+    KF::Observation currentObservation{ 3.5 }; // Observed position
     auto nextState = kf.Update(predictedState, sigmaPoints, currentObservation);
 
     std::cout << observationFunc(nextState.stateMean) << '\n'; // Filtered position
