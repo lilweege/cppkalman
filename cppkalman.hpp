@@ -90,15 +90,15 @@ Moments2Points(const Moments<StateSize, T>& moments)
         for (sizetype j = 0; j < 2*StateSize+1; ++j)
             points.points(j, i) = mu(i);
         for (sizetype j = 1; j < StateSize + 1; ++j)
-            points.points(j, i) += sigma2(i, j-1) * sqrt(c);
+            points.points(j, i) += sigma2(i, j-1) * (T) sqrt(c);
         for (sizetype j = StateSize + 1; j < 2*StateSize+1; ++j)
-            points.points(j, i) -= sigma2(i, j-(StateSize+1)) * sqrt(c);
+            points.points(j, i) -= sigma2(i, j-(StateSize+1)) * (T) sqrt(c);
     }
 
     points.weightsMean.setOnes();
     points.weightsMean(0) = lambda / c;
     for (sizetype i = 1; i < 2*StateSize+1; ++i)
-        points.weightsMean(i) = 0.5 / c;
+        points.weightsMean(i) = (T) 0.5 / c;
 
     points.weightsCovariance = points.weightsMean;
     points.weightsCovariance(0) = lambda / c + (1 - alpha * alpha + beta);
@@ -129,10 +129,10 @@ Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
 }
 
 
-template<sizetype StateSize, sizetype ObservationSize, typename T>
+template<sizetype StateSize, sizetype ObservationSize, typename T, typename Function>
 std::pair<SigmaPoints<StateSize, ObservationSize, T>, Moments<ObservationSize, T>>
 static
-UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, auto f) // FIXME: constrain function with concept
+UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Function f) // FIXME: constrain function with concept
 {
     SigmaPoints<StateSize, ObservationSize, T> points;
     points.weightsCovariance = sigmaPoints.weightsCovariance;
@@ -181,16 +181,16 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
     Moments<StateSize, T> momentsFiltered;
     auto [obsPointsPredicted, obsMomentsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(pointsPredicted, mObservationFunction);
 
-    auto x = pointsPredicted.points;
+    auto predDiff = pointsPredicted.points;
     for (sizetype i = 0; i < 2*StateSize+1; ++i)
         for (sizetype j = 0; j < StateSize; ++j)
-            x(i, j) -= momentsPredicted.stateMean(j);
-    auto y = obsPointsPredicted.points;
+            predDiff(i, j) -= momentsPredicted.stateMean(j);
+    auto obsDiff = obsPointsPredicted.points;
     for (sizetype i = 0; i < 2*StateSize+1; ++i)
         for (sizetype j = 0; j < ObservationSize; ++j)
-            y(i, j) -= obsMomentsPredicted.stateMean(j);
+            obsDiff(i, j) -= obsMomentsPredicted.stateMean(j);
     
-    auto crossSigma = x.transpose() * pointsPredicted.weightsMean.asDiagonal() * y;
+    auto crossSigma = predDiff.transpose() * pointsPredicted.weightsMean.asDiagonal() * obsDiff;
 
     // Kalman gain
     auto K = crossSigma * obsMomentsPredicted.stateCovariance.completeOrthogonalDecomposition().pseudoInverse();
