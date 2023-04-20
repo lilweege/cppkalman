@@ -13,5 +13,5 @@ $ g++ minimal.cpp -std=c++17 -Ieigen
 ###### Windows (msvc)
 *NOTE: Run this from an MSVC enabled terminal (such as `Developer Command Prompt for VS 2022`)*
 ```cmd
-> cl minimal.cpp /std:c++17 /EHsc -Ieigen
+> cl minimal.cpp /std:c++17 /EHsc /Ieigen
 ```
