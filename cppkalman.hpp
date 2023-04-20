@@ -14,19 +14,14 @@
 
 namespace cppkalman {
 
-// using sizetype = size_t;
-// Eigen uses int for its template sizes for some reason
-// This is a hack to avoid -Wconversion warnings (Assume you don't need a vector bigger than 2 billion)
-using sizetype = int;
-
-template<sizetype N, typename T>
+template<int N, typename T>
 struct Moments
 {
     Eigen::Vector<T, N> stateMean;
     Eigen::Matrix<T, N, N> stateCovariance;
 };
 
-template<sizetype StateSize, sizetype N, typename T>
+template<int StateSize, int N, typename T>
 struct SigmaPoints
 {
     Eigen::Matrix<T, 2*StateSize+1, N> points;
@@ -34,7 +29,7 @@ struct SigmaPoints
     Eigen::Vector<T, 2*StateSize+1> weightsCovariance;
 };
 
-template<sizetype StateSize, sizetype ObservationSize, typename T=double>
+template<int StateSize, int ObservationSize, typename T=double>
 class AdditiveUnscentedKalmanFilter
 {
 public:
@@ -65,7 +60,7 @@ public:
 namespace cppkalman {
 
 
-template<sizetype StateSize, typename T>
+template<int StateSize, typename T>
 SigmaPoints<StateSize, StateSize, T>
 static
 Moments2Points(const Moments<StateSize, T>& moments)
@@ -79,25 +74,25 @@ Moments2Points(const Moments<StateSize, T>& moments)
     Eigen::LLT<Eigen::Matrix<T, StateSize, StateSize>, Eigen::Upper> llt{sigma};
     Eigen::Matrix<T, StateSize, StateSize> sigma2 = llt.matrixLLT().transpose();
     // Clear upper triangle
-    for (sizetype i = 0; i < StateSize; ++i)
-        for (sizetype j = i+1; j < StateSize; ++j)
+    for (int i = 0; i < StateSize; ++i)
+        for (int j = i+1; j < StateSize; ++j)
             sigma2(i, j) = 0;
 
     const T lambda = (alpha * alpha) * (StateSize + kappa) - StateSize;
     const T c = StateSize + lambda;
 
-    for (sizetype i = 0; i < StateSize; ++i) {
-        for (sizetype j = 0; j < 2*StateSize+1; ++j)
+    for (int i = 0; i < StateSize; ++i) {
+        for (int j = 0; j < 2*StateSize+1; ++j)
             points.points(j, i) = mu(i);
-        for (sizetype j = 1; j < StateSize + 1; ++j)
+        for (int j = 1; j < StateSize + 1; ++j)
             points.points(j, i) += sigma2(i, j-1) * (T) sqrt(c);
-        for (sizetype j = StateSize + 1; j < 2*StateSize+1; ++j)
+        for (int j = StateSize + 1; j < 2*StateSize+1; ++j)
             points.points(j, i) -= sigma2(i, j-(StateSize+1)) * (T) sqrt(c);
     }
 
     points.weightsMean.setOnes();
     points.weightsMean(0) = lambda / c;
-    for (sizetype i = 1; i < 2*StateSize+1; ++i)
+    for (int i = 1; i < 2*StateSize+1; ++i)
         points.weightsMean(i) = (T) 0.5 / c;
 
     points.weightsCovariance = points.weightsMean;
@@ -107,7 +102,7 @@ Moments2Points(const Moments<StateSize, T>& moments)
 }
 
 
-template<sizetype StateSize, sizetype ObservationSize, typename T>
+template<int StateSize, int ObservationSize, typename T>
 Moments<ObservationSize, T>
 static
 Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
@@ -117,8 +112,8 @@ Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
     
     moments.stateMean = points.transpose() * weightsMean;
     Eigen::Matrix<T, ObservationSize, 2*StateSize+1> pointsDiff = points.transpose();
-    for (sizetype i = 0; i < ObservationSize; ++i)
-        for (sizetype j = 0; j < 2*StateSize+1; ++j)
+    for (int i = 0; i < ObservationSize; ++i)
+        for (int j = 0; j < 2*StateSize+1; ++j)
             pointsDiff(i, j) -= moments.stateMean(i);
 
 
@@ -129,7 +124,7 @@ Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
 }
 
 
-template<sizetype StateSize, sizetype ObservationSize, typename T, typename Function>
+template<int StateSize, int ObservationSize, typename T, typename Function>
 std::pair<SigmaPoints<StateSize, ObservationSize, T>, Moments<ObservationSize, T>>
 static
 UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Function f) // FIXME: constrain function with concept
@@ -137,9 +132,9 @@ UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Func
     SigmaPoints<StateSize, ObservationSize, T> points;
     points.weightsCovariance = sigmaPoints.weightsCovariance;
     points.weightsMean = sigmaPoints.weightsMean;
-    for (sizetype i = 0; i < 2*StateSize+1; ++i) {
+    for (int i = 0; i < 2*StateSize+1; ++i) {
         Eigen::Vector<T, ObservationSize> row = f(sigmaPoints.points.row(i));
-        for (sizetype j = 0; j < ObservationSize; ++j)
+        for (int j = 0; j < ObservationSize; ++j)
             points.points(i, j) = row(j);
     }
 
@@ -147,7 +142,7 @@ UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Func
 }
 
 
-template<sizetype StateSize, sizetype ObservationSize, typename T>
+template<int StateSize, int ObservationSize, typename T>
 AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::AdditiveUnscentedKalmanFilter(
     TransitionFunction&& transitionFunction,
     ObservationFunction&& observationFunction
@@ -158,7 +153,7 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::AdditiveUnscentedK
 }
 
 
-template<sizetype StateSize, sizetype ObservationSize, typename T>
+template<int StateSize, int ObservationSize, typename T>
 std::pair<Moments<StateSize, T>, SigmaPoints<StateSize, StateSize, T>>
 AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Predict(
     const Moments<StateSize, T>& momentsState)
@@ -168,7 +163,7 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Predict(
     return std::make_pair(moments, Moments2Points(moments));
 }
 
-template<sizetype StateSize, sizetype ObservationSize, typename T>
+template<int StateSize, int ObservationSize, typename T>
 Moments<StateSize, T>
 AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
     const Moments<StateSize, T>& momentsPredicted,
@@ -182,12 +177,12 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
     auto [obsPointsPredicted, obsMomentsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(pointsPredicted, mObservationFunction);
 
     auto predDiff = pointsPredicted.points;
-    for (sizetype i = 0; i < 2*StateSize+1; ++i)
-        for (sizetype j = 0; j < StateSize; ++j)
+    for (int i = 0; i < 2*StateSize+1; ++i)
+        for (int j = 0; j < StateSize; ++j)
             predDiff(i, j) -= momentsPredicted.stateMean(j);
     auto obsDiff = obsPointsPredicted.points;
-    for (sizetype i = 0; i < 2*StateSize+1; ++i)
-        for (sizetype j = 0; j < ObservationSize; ++j)
+    for (int i = 0; i < 2*StateSize+1; ++i)
+        for (int j = 0; j < ObservationSize; ++j)
             obsDiff(i, j) -= obsMomentsPredicted.stateMean(j);
     
     auto crossSigma = predDiff.transpose() * pointsPredicted.weightsMean.asDiagonal() * obsDiff;
