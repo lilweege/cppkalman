@@ -14,14 +14,14 @@
 
 namespace cppkalman {
 
-template<int N, typename T>
+template<int N, typename T=double>
 struct Moments
 {
     Eigen::Vector<T, N> stateMean;
     Eigen::Matrix<T, N, N> stateCovariance;
 };
 
-template<int StateSize, int N, typename T>
+template<int StateSize, int N, typename T=double>
 struct SigmaPoints
 {
     Eigen::Matrix<T, 2*StateSize+1, N> points;
