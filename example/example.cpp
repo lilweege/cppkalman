@@ -117,19 +117,20 @@ static void StepGNN(
             observation = observations[bestIdx];
             observations.erase(observations.begin() + bestIdx);
             track.age = 0;
-            track.isCoasting = true;
+            track.isCoasting = false;
         }
         else {
             track.age += 1;
-            track.isCoasting = false;
+            track.isCoasting = true;
         }
 
         if (track.age >= DELETE_AGE_THRESHOLD) {
             toDelete.push_back(trackIdx);
         }
         track.endTime = t;
-
-        // TODO: Determine if track should be confirmed
+        if (t > track.startTime + 5) { // FIXME: Use rolling average of detection rate
+            track.isConfirmed = true;
+        }
 
         // ==== UPDATE ====
         track.current = track.kf.Update(momentsPred, pointsPred, observation);
