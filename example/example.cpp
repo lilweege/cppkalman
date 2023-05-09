@@ -48,7 +48,7 @@ struct Track
     Moments<STATE_SIZE, FloatType> current;
     size_t age = 0;
     bool isCoasting = false;
-    // bool isConfirmed = false;
+    bool isConfirmed = false;
     // std::vector<KalmanFilter::State> history;
     KalmanFilter kf;
 };
