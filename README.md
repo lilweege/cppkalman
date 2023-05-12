@@ -2,6 +2,10 @@
 
 A port of [pykalman](https://github.com/pykalman/pykalman)'s `AdditiveUnscentedKalmanFilter` to C++. The library consists of a single header file (`cppkalman.hpp`).
 
+
+https://user-images.githubusercontent.com/59585724/236987500-49571ba1-b5ec-46c2-a849-ddef1bf96c42.mp4
+
+
 ### Getting Started
 Be sure to clone the repository recursively (or install eigen globally). Then, see `minimal.cpp` for a minimal example usage.
 
