@@ -33,7 +33,8 @@ int main()
 
     // Update
     KF::Observation currentObservation{ 3.5 }; // Observed position
-    auto nextState = kf.Update(predictedState, sigmaPoints, currentObservation);
+    Eigen::Matrix<double, 1, 1> R{ 1.0 }; // Observation covariance
+    auto nextState = kf.Update(predictedState, sigmaPoints, R, currentObservation);
 
     std::cout << observationFunc(nextState.stateMean) << '\n'; // Filtered position
     // The filtered position should be between predicted (3.3) and obsereved (3.5)

@@ -23,6 +23,12 @@ static const Eigen::Matrix<FloatType, OBSERVATION_SIZE, STATE_SIZE> H = (Eigen::
     0.0, 0.0, 1.0, 0.0, 0.0, 0.0
 ).finished();
 
+static const Eigen::Matrix<FloatType, OBSERVATION_SIZE, OBSERVATION_SIZE> R = (Eigen::Matrix<FloatType, OBSERVATION_SIZE, OBSERVATION_SIZE>() <<
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0
+).finished();
+
 static KalmanFilter::State TransitionFunction(KalmanFilter::State state)
 {
     return F * state;
@@ -69,7 +75,7 @@ Track::Track(size_t time, const KalmanFilter::Observation& obs)
         0,     0,     0,     0,     0, 10000;
 
     auto [momentsPred, pointsPred] = kf.Predict(current);
-    current = kf.Update(momentsPred, pointsPred, obs);
+    current = kf.Update(momentsPred, pointsPred, R, obs);
     // history.push_back(current.stateMean);
 }
 
@@ -112,9 +118,10 @@ static void StepGNN(
             }
         }
 
-        std::optional<KalmanFilter::Observation> observation = std::nullopt;
-        if (bestIdx != observations.size()) {
-            observation = observations[bestIdx];
+        KalmanFilter::Observation observation;
+        bool hasObservation = bestIdx != observations.size();
+        if (hasObservation) {
+            observation = std::move(observations[bestIdx]);
             observations.erase(observations.begin() + bestIdx);
             track.age = 0;
             track.isCoasting = false;
@@ -133,7 +140,8 @@ static void StepGNN(
         }
 
         // ==== UPDATE ====
-        track.current = track.kf.Update(momentsPred, pointsPred, observation);
+        if (hasObservation)
+            track.current = track.kf.Update(momentsPred, pointsPred, R, observation);
 
         // Save result for plotting
         // track.history.push_back(track.current.stateMean);

@@ -12,7 +12,6 @@ Luigi Quattrociocchi - April 20, 2023
 #include <Eigen/Cholesky>
 
 #include <functional>
-#include <optional>
 #include <utility>
 
 namespace cppkalman {
@@ -54,7 +53,9 @@ public:
      * @param[in] transitionFunction A function describing how the state changes between times t and t+1.
      * @param[in] observationFunction A function characterizing how the observation at time t+1 is generated.
      */
-    AdditiveUnscentedKalmanFilter(TransitionFunction&&, ObservationFunction&&);
+    AdditiveUnscentedKalmanFilter(
+        TransitionFunction&& transitionFunction,
+        ObservationFunction&& observationFunction);
 
     /**
      * Predict next state distribution
@@ -67,17 +68,23 @@ public:
      * @returns A pair containings: (1) predicted mean state and covariance corresponding to time step t+1,
      * and (2) sigma points corresponding to the predicted state.
      */
-    [[nodiscard]] std::pair<Moments<StateSize, T>, SigmaPoints<StateSize, StateSize, T>> Predict(const Moments<StateSize, T>&);
+    [[nodiscard]] std::pair<Moments<StateSize, T>, SigmaPoints<StateSize, StateSize, T>> Predict(
+        const Moments<StateSize, T>& currentState);
 
     /**
      * Integrate new observation to correct state estimates
      * 
      * @param[in] predictedState Predicted mean state and covariance corresponding to time step t+1.
      * @param[in] predictedPoints Sigma points corresponding to predictedState.
-     * @param[in] observation An (optional) observation at time t+1. If no observation is provided, predictedState is returned.
+     * @param[in] observationCovariance Observation noise covariance matrix. Also known as R.
+     * @param[in] observation An observation at time t+1. If no observation is provided, predictedState is returned.
      * @returns Filtered mean state and covariance corresponding to time step t+1.
     */
-    [[nodiscard]] Moments<StateSize, T> Update(const Moments<StateSize, T>&, const SigmaPoints<StateSize, StateSize, T>&, const std::optional<Observation>&);
+    [[nodiscard]] Moments<StateSize, T> Update(
+        const Moments<StateSize, T>& predictedState,
+        const SigmaPoints<StateSize, StateSize, T>& predictedPoints,
+        const Eigen::Matrix<T, ObservationSize, ObservationSize>& observationCovariance,
+        const Observation& observation);
 
 public:
     TransitionFunction mTransitionFunction;
@@ -144,12 +151,15 @@ Moments2Points(const Moments<StateSize, T>& moments)
  * Calculate estimated mean and covariance of sigma points.
  * 
  * @param[in] sigmaPoints SigmaPoints object containing points and weights.
+ * @param[in] sigmaNoise Additive noise covariance matrix, if any.
  * @returns Mean and covariance estimated using points.
 */
 template<int StateSize, int ObservationSize, typename T>
 Moments<ObservationSize, T>
 static
-Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
+Points2Moments(
+    const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints,
+    const Eigen::Matrix<T, ObservationSize, ObservationSize>& sigmaNoise)
 {
     Moments<ObservationSize, T> moments;
     const auto& [points, weightsMean, weightsCovariance] = sigmaPoints;
@@ -161,8 +171,7 @@ Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
             pointsDiff(i, j) -= moments.stateMean(i);
 
 
-    moments.stateCovariance.setIdentity();
-    moments.stateCovariance += pointsDiff * weightsCovariance.asDiagonal() * pointsDiff.transpose();
+    moments.stateCovariance = pointsDiff * weightsCovariance.asDiagonal() * pointsDiff.transpose() + sigmaNoise;
 
     return moments;
 }
@@ -175,12 +184,16 @@ Points2Moments(const SigmaPoints<StateSize, ObservationSize, T>& sigmaPoints)
  * available, treat it as additional variance due to additive noise.
  * 
  * @param[in] sigmaPoints Points to pass into f's first argument and associated weights.
+ * @param[in] sigmaNoise Covariance matrix for additive noise, if any.
  * @param[in] f transition function from time t to time t+1.
 */
 template<int StateSize, int ObservationSize, typename T, typename Function>
 std::pair<Moments<ObservationSize, T>, SigmaPoints<StateSize, ObservationSize, T>>
 static
-UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Function f) // FIXME: constrain function with concept
+UnscentedTransform(
+    const SigmaPoints<StateSize, StateSize, T>& sigmaPoints,
+    const Eigen::Matrix<T, ObservationSize, ObservationSize>& sigmaNoise,
+    Function f) // FIXME: constrain function with concept
 {
     SigmaPoints<StateSize, ObservationSize, T> points;
     points.weightsCovariance = sigmaPoints.weightsCovariance;
@@ -190,7 +203,7 @@ UnscentedTransform(const SigmaPoints<StateSize, StateSize, T>& sigmaPoints, Func
         for (int j = 0; j < ObservationSize; ++j)
             points.points(i, j) = row(j);
     }
-    return std::make_pair(Points2Moments(points), points);
+    return std::make_pair(Points2Moments(points, sigmaNoise), points);
 }
 
 
@@ -211,7 +224,10 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Predict(
     const Moments<StateSize, T>& currentState)
 {
     SigmaPoints pointsState = Moments2Points(currentState);
-    auto [moments, _] = UnscentedTransform<StateSize, StateSize, T>(pointsState, mTransitionFunction);
+    // TODO: Make sigmaTransition a parameter
+    Eigen::Matrix<T, StateSize, StateSize> sigmaTransition;
+    sigmaTransition.setIdentity();
+    auto [moments, _] = UnscentedTransform<StateSize, StateSize, T>(pointsState, sigmaTransition, mTransitionFunction);
     return std::make_pair(moments, Moments2Points(moments));
 }
 
@@ -220,12 +236,10 @@ Moments<StateSize, T>
 AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
     const Moments<StateSize, T>& predictedState,
     const SigmaPoints<StateSize, StateSize, T>& predictedPoints,
-    const std::optional<Observation>& observation)
+    const Eigen::Matrix<T, ObservationSize, ObservationSize>& observationCovariance,
+    const Observation& observation)
 {
-    if (!observation)
-        return predictedState;
-
-    auto [obsMomentsPredicted, obsPointsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(predictedPoints, mObservationFunction);
+    auto [obsMomentsPredicted, obsPointsPredicted] = UnscentedTransform<StateSize, ObservationSize, T>(predictedPoints, observationCovariance, mObservationFunction);
 
     auto predDiff = predictedPoints.points;
     for (int i = 0; i < 2*StateSize+1; ++i)
@@ -243,7 +257,7 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Update(
 
     // Correct
     Moments<StateSize, T> momentsFiltered;
-    momentsFiltered.stateMean = predictedState.stateMean + K * (*observation - obsMomentsPredicted.stateMean);
+    momentsFiltered.stateMean = predictedState.stateMean + K * (observation - obsMomentsPredicted.stateMean);
     momentsFiltered.stateCovariance = predictedState.stateCovariance - K * crossSigma.transpose();
     
     return momentsFiltered;
