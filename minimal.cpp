@@ -29,7 +29,9 @@ int main()
         Eigen::Matrix2d{{ 1.0, 0.0 },
                         { 0.0, 1.0 }}, // State covariance
     };
-    auto [predictedState, sigmaPoints] = kf.Predict(currentState);
+    Eigen::Matrix<double, 2, 2> Q{{ 1.0, 0.0 },
+                                  { 0.0, 1.0 }}; // Transition covariance
+    auto [predictedState, sigmaPoints] = kf.Predict(currentState, Q);
 
     // Update
     KF::Observation currentObservation{ 3.5 }; // Observed position

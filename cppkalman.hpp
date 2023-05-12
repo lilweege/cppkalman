@@ -64,12 +64,14 @@ public:
      * from time steps 0...t, calculate the predicted mean, covariance, and sigma
      * points for the state at time t+1.
      * 
-     * @param[in] currentState the state at time step t given observations from time steps 0...t.
+     * @param[in] currentState The state at time step t given observations from time steps 0...t.
+     * @param[in] transitionCovariance Transition noise covariance matrix. Also known as Q.
      * @returns A pair containings: (1) predicted mean state and covariance corresponding to time step t+1,
      * and (2) sigma points corresponding to the predicted state.
      */
     [[nodiscard]] std::pair<Moments<StateSize, T>, SigmaPoints<StateSize, StateSize, T>> Predict(
-        const Moments<StateSize, T>& currentState);
+        const Moments<StateSize, T>& currentState,
+        const Eigen::Matrix<T, StateSize, StateSize>& transitionCovariance);
 
     /**
      * Integrate new observation to correct state estimates
@@ -221,13 +223,11 @@ AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::AdditiveUnscentedK
 template<int StateSize, int ObservationSize, typename T>
 std::pair<Moments<StateSize, T>, SigmaPoints<StateSize, StateSize, T>>
 AdditiveUnscentedKalmanFilter<StateSize, ObservationSize, T>::Predict(
-    const Moments<StateSize, T>& currentState)
+    const Moments<StateSize, T>& currentState,
+    const Eigen::Matrix<T, StateSize, StateSize>& transitionCovariance)
 {
     SigmaPoints pointsState = Moments2Points(currentState);
-    // TODO: Make sigmaTransition a parameter
-    Eigen::Matrix<T, StateSize, StateSize> sigmaTransition;
-    sigmaTransition.setIdentity();
-    auto [moments, _] = UnscentedTransform<StateSize, StateSize, T>(pointsState, sigmaTransition, mTransitionFunction);
+    auto [moments, _] = UnscentedTransform<StateSize, StateSize, T>(pointsState, transitionCovariance, mTransitionFunction);
     return std::make_pair(moments, Moments2Points(moments));
 }
 

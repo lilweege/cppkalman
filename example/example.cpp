@@ -23,10 +23,20 @@ static const Eigen::Matrix<FloatType, OBSERVATION_SIZE, STATE_SIZE> H = (Eigen::
     0.0, 0.0, 1.0, 0.0, 0.0, 0.0
 ).finished();
 
+// TODO: Figure out actual values for these matrices
 static const Eigen::Matrix<FloatType, OBSERVATION_SIZE, OBSERVATION_SIZE> R = (Eigen::Matrix<FloatType, OBSERVATION_SIZE, OBSERVATION_SIZE>() <<
     1.0, 0.0, 0.0,
     0.0, 1.0, 0.0,
     0.0, 0.0, 1.0
+).finished();
+
+static const Eigen::Matrix<FloatType, STATE_SIZE, STATE_SIZE> Q = (Eigen::Matrix<FloatType, STATE_SIZE, STATE_SIZE>() <<
+    1.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0, 1.0
 ).finished();
 
 static KalmanFilter::State TransitionFunction(KalmanFilter::State state)
@@ -40,7 +50,7 @@ static KalmanFilter::Observation ObservationFunction(KalmanFilter::State state)
 }
 
 
-#define DISTANCE_THRESHOLD 2.0
+#define DISTANCE_THRESHOLD 1.0
 #define DELETE_AGE_THRESHOLD 3
 
 struct Track
@@ -55,7 +65,7 @@ struct Track
     size_t age = 0;
     bool isCoasting = false;
     bool isConfirmed = false;
-    // std::vector<KalmanFilter::State> history;
+    std::vector<KalmanFilter::State> history;
     KalmanFilter kf;
 };
 size_t Track::_id = 0;
@@ -74,9 +84,9 @@ Track::Track(size_t time, const KalmanFilter::Observation& obs)
         0,     0,     0,     0, 10000,     0,
         0,     0,     0,     0,     0, 10000;
 
-    auto [momentsPred, pointsPred] = kf.Predict(current);
+    auto [momentsPred, pointsPred] = kf.Predict(current, Q);
     current = kf.Update(momentsPred, pointsPred, R, obs);
-    // history.push_back(current.stateMean);
+    history.push_back(current.stateMean);
 }
 
 static FloatType Dist(FloatType x1, FloatType y1, FloatType z1, FloatType x2, FloatType y2, FloatType z2)
@@ -103,7 +113,7 @@ static void StepGNN(
         auto& track = tracks[trackIdx];
 
         // ==== PREDICT ====
-        auto [momentsPred, pointsPred] = track.kf.Predict(track.current);
+        auto [momentsPred, pointsPred] = track.kf.Predict(track.current, Q);
 
         // ==== ASSOCIATE ====
         FloatType bestDst = 1e9;
@@ -144,7 +154,7 @@ static void StepGNN(
             track.current = track.kf.Update(momentsPred, pointsPred, R, observation);
 
         // Save result for plotting
-        // track.history.push_back(track.current.stateMean);
+        track.history.push_back(track.current.stateMean);
     }
 
     // Delete old tracks
@@ -180,11 +190,32 @@ static std::vector<std::vector<KalmanFilter::Observation>> GetTestData()
 
 int main()
 {
+    std::cout << R << '\n';
+    return 0;
     const auto all_observations = GetTestData();
     std::vector<Track> tracks;
     std::vector<Track> deadTracks;
+    auto PrintTrack = [](size_t t, const Track& track) {
+        int start = std::max((int)t + 1 - 10, (int)track.startTime);
+        int end = (int)track.endTime + 1;
+        int nPoints = end - start;
+        if (nPoints <= 0) return;
+        std::cout << track.id
+            << ' ' << track.startTime
+            << ' ' << track.endTime
+            << ' ' << track.isCoasting
+            << ' ' << track.isConfirmed
+            << '\n';
+        for (const auto& line : track.history) {
+            std::cout << line.transpose() << '\n';
+        }
+        std::cout << '\n';
+    };
 
     for (size_t t = 0; t < all_observations.size(); ++t) {
         StepGNN(t, all_observations[t], tracks, deadTracks);
+        for (const auto& track : tracks)     PrintTrack(t, track);
+        for (const auto& track : deadTracks) PrintTrack(t, track);
+        std::cout << '\n';
     }
 }
