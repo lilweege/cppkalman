@@ -190,8 +190,6 @@ static std::vector<std::vector<KalmanFilter::Observation>> GetTestData()
 
 int main()
 {
-    std::cout << R << '\n';
-    return 0;
     const auto all_observations = GetTestData();
     std::vector<Track> tracks;
     std::vector<Track> deadTracks;
