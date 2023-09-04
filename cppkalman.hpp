@@ -205,7 +205,10 @@ UnscentedTransform(
         for (int j = 0; j < ObservationSize; ++j)
             points.points(i, j) = row(j);
     }
-    return std::make_pair(Points2Moments(points, sigmaNoise), points);
+    
+    // NOTE: For some reason template argument deduction fails here on MSVC
+    auto moments = Points2Moments<StateSize, ObservationSize, T>(points, sigmaNoise);
+    return std::make_pair(moments, points);
 }
 
 
